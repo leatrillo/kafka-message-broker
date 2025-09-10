@@ -1,0 +1,23 @@
+{
+  "type": "record",
+  "name": "InvoiceCreated",
+  "namespace": "coelsa.billing",
+  "fields": [
+    {
+      "name": "invoiceId",
+      "type": "string"
+    },
+    {
+      "name": "customerId",
+      "type": "string"
+    },
+    {
+      "name": "totalAmount",
+      "type": "double"
+    },
+    {
+      "name": "currency",
+      "type": "string"
+    }
+  ]
+}

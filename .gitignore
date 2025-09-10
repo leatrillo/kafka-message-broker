@@ -1,0 +1,12 @@
+
+bin/
+obj/
+*.nupkg
+*.snupkg
+*.user
+.vscode/
+.idea/
+*.suo
+*.sln.iml
+artifacts/
+TestResult*/
