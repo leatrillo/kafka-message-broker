@@ -1,12 +1,29 @@
-
+# Build results
 bin/
 obj/
-*.nupkg
-*.snupkg
-*.user
-.vscode/
-.idea/
-*.suo
-*.sln.iml
 artifacts/
 TestResult*/
+
+# Packages
+*.nupkg
+*.snupkg
+*.nuspec
+
+# User files
+*.user
+*.suo
+*.sln.iml
+
+# IDEs
+.vscode/
+.idea/
+.vs/
+
+# Others
+*.dll
+*.pdb
+*.cache
+*.log
+
+# Optional: si usás Rider
+*.DotSettings.user
