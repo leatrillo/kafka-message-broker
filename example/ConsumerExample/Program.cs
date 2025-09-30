@@ -1,11 +1,12 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Coelsa.Artifact.MessageBroker;
 using Coelsa.Artifact.MessageBroker.Support.InboxOutbox;
+using Coelsa.Artifact.MessageBroker.Support.Handlers; // 👈 para KafkaConsumer
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using ConsumerExample;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 
 var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
 {
@@ -14,16 +15,16 @@ var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
 builder.Configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
 builder.Services.AddLogging(l => l.AddConsole());
 
-// NuGet
+// NuGet (registra concretos + mapping interfaces)
 builder.Services.AddMessageBroker(builder.Configuration);
 
 // Inbox (SQL) en app
 builder.Services.AddSingleton<IInboxStore, SqlInboxStore>();
 
-// Decorar consumer
+// Decorar consumer ⇒ envolver el CONCRETO
 builder.Services.AddSingleton<IMessageConsumer>(sp =>
 {
-    var inner = sp.GetRequiredService<IMessageConsumer>(); // KafkaConsumer
+    var inner = sp.GetRequiredService<KafkaConsumer>();
     var store = sp.GetRequiredService<IInboxStore>();
     return new InboxConsumerDecorator(inner, store);
 });
@@ -34,6 +35,7 @@ var consumer = app.Services.GetRequiredService<IMessageConsumer>();
 
 using var cts = new CancellationTokenSource();
 
+// Consumo simple
 _ = consumer.ConsumeAsync<Dictionary<string, object>>(async (evt, key, headers) =>
 {
     logger.LogInformation("[CONSUMED] Key={Key} Type={Type} Subject={Subject} Data={Data}",
@@ -41,7 +43,7 @@ _ = consumer.ConsumeAsync<Dictionary<string, object>>(async (evt, key, headers) 
     await Task.CompletedTask;
 }, cts.Token);
 
-// Batch demo (opcional)
+// Consumo batch (opcional)
 _ = consumer.ConsumeBatchAsync<Dictionary<string, object>>(
     maxBatchSize: 10,
     maxWaitTime: TimeSpan.FromSeconds(5),

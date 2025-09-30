@@ -8,28 +8,33 @@ namespace Coelsa.Artifact.MessageBroker;
 
 public static class MessageBrokerExtension
 {
-    public static IServiceCollection AddMessageBroker(this IServiceCollection services, IConfiguration config, string sectionName = "Kafka")
+    public static IServiceCollection AddMessageBroker(this IServiceCollection services, IConfiguration config)
     {
-        var options = config.GetSection(sectionName).Get<MessageBrokerSettings>()
-            ?? throw new InvalidOperationException($"Configuration section '{sectionName}' is missing or invalid.");
+        // 1) Cargar settings desde "Kafka"
+        var section = config.GetSection("Kafka");
+        var options = section.Get<MessageBrokerSettings>()
+            ?? throw new InvalidOperationException("Kafka configuration missing (section 'Kafka').");
 
         services.AddSingleton(options);
 
+        // 2) (Opcional) Schema Registry cliente si hay URL
         if (!string.IsNullOrWhiteSpace(options.SchemaRegistryUrl))
         {
-            services.AddSingleton<ISchemaRegistryClient>(sp => new CachedSchemaRegistryClient(new SchemaRegistryConfig
-            {
-                Url = options.SchemaRegistryUrl!
-            }));
-
-            if (options.Avro is not null)
-            {
-                services.AddSingleton<IAvroSchemaResolver>(sp => new FileAvroSchemaResolver(options));
-            }
+            services.AddSingleton<ISchemaRegistryClient>(_ =>
+                new CachedSchemaRegistryClient(new SchemaRegistryConfig
+                {
+                    Url = options.SchemaRegistryUrl
+                }));
         }
 
-        services.AddSingleton<IMessagePublisher, KafkaPublisher>();
-        services.AddSingleton<IMessageConsumer, KafkaConsumer>();
+        // 3) Registrar CONCRETOS
+        services.AddSingleton<KafkaPublisher>();
+        services.AddSingleton<KafkaConsumer>();
+
+        // 4) Mapear interfaces a los concretos (sin decorar acá)
+        services.AddSingleton<IMessagePublisher>(sp => sp.GetRequiredService<KafkaPublisher>());
+        services.AddSingleton<IMessageConsumer>(sp => sp.GetRequiredService<KafkaConsumer>());
+
         return services;
     }
 }

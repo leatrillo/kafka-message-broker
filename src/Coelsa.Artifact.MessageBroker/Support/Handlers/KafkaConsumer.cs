@@ -9,7 +9,7 @@ using Coelsa.Artifact.MessageBroker.Support.Helpers;
 
 namespace Coelsa.Artifact.MessageBroker.Support.Handlers;
 
-internal sealed class KafkaConsumer : IMessageConsumer
+public sealed class KafkaConsumer : IMessageConsumer
 {
     private readonly IConsumer<string?, byte[]> _consumer;
     private readonly MessageBrokerSettings _settings;

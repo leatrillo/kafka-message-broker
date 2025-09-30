@@ -10,7 +10,7 @@ using Coelsa.Artifact.MessageBroker.Support.Helpers;
 
 namespace Coelsa.Artifact.MessageBroker.Support.Handlers;
 
-internal sealed class KafkaPublisher : IMessagePublisher, IAsyncDisposable
+public sealed class KafkaPublisher : IMessagePublisher, IAsyncDisposable
 {
     private readonly IProducer<string?, byte[]> _producer;
     private readonly MessageBrokerSettings _settings;
