@@ -14,7 +14,7 @@ TestResult*/
 *.suo
 *.sln.iml
 
-# IDEs
+# IDEs ms
 .vscode/
 .idea/
 .vs/
