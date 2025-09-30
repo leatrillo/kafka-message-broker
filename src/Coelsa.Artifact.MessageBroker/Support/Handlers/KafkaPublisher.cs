@@ -102,6 +102,18 @@ internal sealed class KafkaPublisher : IMessagePublisher, IAsyncDisposable
         await _producer.ProduceAsync(_settings.Topic, kafkaMessage, cancellationToken);
     }
 
+
+    public async Task PublishBatchAsync<TData>(IEnumerable<CloudEventMessage<TData>> messages, Func<CloudEventMessage<TData>, string?>? keySelector = null, CancellationToken cancellationToken = default)
+    {
+        foreach (var m in messages)
+        {
+            var key = keySelector?.Invoke(m);
+            await PublishAsync(m, key, null, cancellationToken);
+        }
+    }
+
+
+
     public ValueTask DisposeAsync()
     {
         _producer.Flush(TimeSpan.FromSeconds(5));

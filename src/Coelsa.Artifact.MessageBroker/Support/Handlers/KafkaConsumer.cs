@@ -39,9 +39,7 @@ internal sealed class KafkaConsumer : IMessageConsumer
         _consumer = new ConsumerBuilder<string?, byte[]>(config).Build();
     }
 
-    public Task ConsumeAsync<TData>(
-        Func<CloudEventMessage<TData>, string?, IReadOnlyDictionary<string, string>, Task> onMessage,
-        CancellationToken cancellationToken)
+    public Task ConsumeAsync<TData>(Func<CloudEventMessage<TData>, string?, IReadOnlyDictionary<string, string>, Task> onMessage, CancellationToken cancellationToken)
     {
         _consumer.Subscribe(_settings.Topic);
 
@@ -107,10 +105,55 @@ internal sealed class KafkaConsumer : IMessageConsumer
             }
             catch (OperationCanceledException)
             {
-                // cancelación normal
+                //logger.error("ex.Message");
+                //throw;
             }
         }, cancellationToken);
     }
+
+    public Task ConsumeBatchAsync<TData>(int maxBatchSize, TimeSpan maxWaitTime, Func<IReadOnlyList<(CloudEventMessage<TData> evt, string? key, IReadOnlyDictionary<string, string> headers)>, Task> onBatch, CancellationToken cancellationToken)
+    {
+        _consumer.Subscribe(_settings.Topic);
+
+        return Task.Run(async () =>
+        {
+            var buffer = new List<(CloudEventMessage<TData>, string?, IReadOnlyDictionary<string, string>)>(maxBatchSize);
+            var batchStart = DateTimeOffset.UtcNow;
+
+            try
+            {
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    var cr = _consumer.Consume(TimeSpan.FromMilliseconds(100));
+                    if (cr is null)
+                    {
+                        if (buffer.Count > 0 && DateTimeOffset.UtcNow - batchStart >= maxWaitTime)
+                        {
+                            await onBatch(buffer);
+                            buffer.Clear();
+                            batchStart = DateTimeOffset.UtcNow;
+                        }
+                        continue;
+                    }
+
+                    var (evt, key, headers) = Deserialize<TData>(cr); // usa tu lógica existente
+                    buffer.Add((evt, key, headers));
+
+                    if (buffer.Count >= maxBatchSize || DateTimeOffset.UtcNow - batchStart >= maxWaitTime)
+                    {
+                        await onBatch(buffer);
+                        buffer.Clear();
+                        batchStart = DateTimeOffset.UtcNow;
+                    }
+                }
+            }
+            catch (OperationCanceledException) 
+            {
+
+            }
+        }, cancellationToken);
+    }
+
 
     public ValueTask DisposeAsync()
     {
@@ -120,6 +163,53 @@ internal sealed class KafkaConsumer : IMessageConsumer
     }
 
     // ---------- helpers ----------
+    private (CloudEventMessage<TData> evt, string? key, IReadOnlyDictionary<string, string> headers)Deserialize<TData>(ConsumeResult<string?, byte[]> cr)
+    {
+        var root = JsonDocument.Parse(cr.Message.Value).RootElement;
+        CloudEventMessage<TData> ce;
+
+        if (root.TryGetProperty("data_base64", out var b64) && _schemaRegistry is not null)
+        {
+            var avroBytes = b64.GetBytesFromBase64();
+            var deser = new AvroDeserializer<GenericRecord>(_schemaRegistry);
+            var record = deser.DeserializeAsync(avroBytes, false, new SerializationContext(MessageComponentType.Value, _settings.Topic))
+                            .ConfigureAwait(false).GetAwaiter().GetResult();
+
+            var map = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+            foreach (var f in record.Schema.Fields)
+            {
+                var ok = record.TryGetValue(f.Name, out var tmp);
+                map[f.Name] = NormalizeAvroValue(ok ? tmp : null);
+            }
+            var dataJson = JsonSerializer.Serialize(map);
+            var dataObj = JsonSerializer.Deserialize<TData>(dataJson)!;
+
+            ce = new CloudEventMessage<TData>
+            {
+                SpecVersion = root.GetProperty("specversion").GetString()!,
+                Id = root.GetProperty("id").GetString()!,
+                Source = root.GetProperty("source").GetString()!,
+                Type = root.GetProperty("type").GetString()!,
+                Time = root.GetProperty("time").GetDateTimeOffset(),
+                DataContentType = "avro/binary",
+                Subject = root.TryGetProperty("subject", out var subj) ? subj.GetString() : null,
+                Data = dataObj,
+                Extensions = root.TryGetProperty("extensions", out var ext)
+                                    ? JsonSerializer.Deserialize<Dictionary<string, object>>(ext.GetRawText())
+                                    : null
+            };
+        }
+        else
+        {
+            ce = JsonMessageSerializer.Deserialize<CloudEventMessage<TData>>(cr.Message.Value);
+        }
+
+        var key = cr.Message.Key;
+        var headers = cr.Message.Headers.ToDictionary(h => h.Key, h => Encoding.UTF8.GetString(h.GetValueBytes()));
+        return (ce, key, headers);
+    }
+
+
     private static object? NormalizeAvroValue(object? value)
     {
         if (value is null) return null;
