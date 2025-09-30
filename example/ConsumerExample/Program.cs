@@ -7,10 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
-{
-    ContentRootPath = AppContext.BaseDirectory
-});
+var builder = Host.CreateApplicationBuilder(args);
 builder.Configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
 builder.Services.AddLogging(l => l.AddConsole());
 
@@ -34,7 +31,6 @@ var consumer = app.Services.GetRequiredService<IMessageConsumer>();
 
 using var cts = new CancellationTokenSource();
 
-// 1) consumo unitario
 _ = consumer.ConsumeAsync<Dictionary<string, object>>(async (evt, key, headers) =>
 {
     logger.LogInformation("[CONSUMED] Key={Key} Type={Type} Subject={Subject} Data={Data}",
@@ -42,7 +38,7 @@ _ = consumer.ConsumeAsync<Dictionary<string, object>>(async (evt, key, headers) 
     await Task.CompletedTask;
 }, cts.Token);
 
-// 2) consumo batch (ejemplo)
+// Batch demo (opcional)
 _ = consumer.ConsumeBatchAsync<Dictionary<string, object>>(
     maxBatchSize: 10,
     maxWaitTime: TimeSpan.FromSeconds(5),
